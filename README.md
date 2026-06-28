@@ -61,20 +61,8 @@ Cometer un Falso Negativo (no detectar la fuga) es **7.5 veces más costoso** pa
 
 Para evaluar el comportamiento real del clasificador sobre la cartera activa, las decisiones del modelo se contrastan contra el terreno de verdad (*ground truth*) de un conjunto de prueba independiente de **1,000 clientes**. La distribución de las frecuencias absolutas obtenidas por el modelo campeón (Random Forest) se estructura en la siguiente matriz:
 
-```text
-                      PREDICCIÓN DEL MODELO
-                    Predice 0          Predice 1
-                (Cliente Estable)   (Cliente en Riesgo)
-               +-------------------+-------------------+
-     Real 0    |    Verdaderos     |      Falsos       |
- (Permaneció)  |   Negativos (VN)  |   Positivos (FP)  |
-               |        733        |        67         |
-               +-------------------+-------------------+
-     Real 1    |      Falsos       |    Verdaderos     |
-  (Abandonó)   |   Negativos (FN)  |   Positivos (VP)  |
-               |        37         |        163        |
-               +-------------------+-------------------+
-```
+![Matriz de Confusión](Matriz_confusion.png)
+
 2.1 Desglose Analítico e Interpretación Operativa de los Cuadrantes
 Al evaluar el rendimiento del sistema sobre una tasa base de abandono real del 20% (200 clientes que efectivamente se fugaron de la muestra), el comportamiento del modelo se traduce en los siguientes impactos directos para la operación:
 Verdaderos Negativos (VN = 733 casos): Clientes clasificados con precisión como estables que mantuvieron sus niveles de transaccionalidad. Representan la base orgánica saludable del negocio. Operativamente se excluyen de las campañas para evitar saturación y optimizar recursos.
@@ -190,7 +178,9 @@ Al evaluar de forma continua el comportamiento de la función $EC(t)$ sobre las 
 
 ## 5. INTERPRETACIÓN DE LA CURVA ROC Y AUC
 
-### 5.1 Curva ROC (Receiver Operating Characteristic)
+### 5.1 Curva ROC (Receiver Operating Characteristic) 
+
+![Curva ROC y AUC](Roc.png)
 La curva ROC es una representación gráfica dinámica que evalúa el rendimiento del clasificador a lo largo de todos los espectros posibles para el umbral de decisión ($0$ a $1$). Esta curva mapea en el eje vertical la Tasa de Verdaderos Positivos ($TPR$ o *Recall*), frente a la Tasa de Falsos Positivos ($FPR$ o $1 - Specificity$) en el eje horizontal.
 
 * **Comportamiento del Modelo:** La curva de nuestro modelo campeón (Random Forest) exhibe un arco pronunciado hacia la esquina superior izquierda. Este comportamiento visual demuestra de forma cualitativa que el algoritmo es capaz de maximizar la captura de clientes en riesgo de abandono ($TPR$) manteniendo bajo estricto control el volumen de falsas alarmas ($FPR$), distanciándose significativamente de la línea diagonal de 45 grados que representa un clasificador aleatorio o ingenuo.
@@ -200,6 +190,116 @@ El valor del AUC condensa el rendimiento de la curva ROC en un único indicador 
 
 * **Resultado Obtenido:** El clasificador Random Forest alcanza un **AUC-ROC de 0.9180**.
 * **Interpretación Operativa:** De acuerdo con los estándares de la industria, un AUC superior a $0.90$ califica el desempeño del sistema como **sobresaliente**. En términos prácticos, esto significa que en el **91.80%** de las ocasiones, el modelo ordenará y priorizará correctamente a los usuarios según su nivel de riesgo real. Esta excelente capacidad de separación analítica blinda la operación del negocio, asegurando que las alertas generadas posean un sólido fundamento probabilístico antes de activar al equipo de Customer Success.
+
+## 6. RESULTADOS DE VALIDACIÓN CRUZADA
+
+Para garantizar con rigor científico que el clasificador cuenta con una adecuada capacidad de generalización ante datos nuevos y descartar cualquier presencia de sobreajuste (*overfitting*) provocado por un acoplamiento fortuito a la partición de entrenamiento, se implementó un esquema de **Validación Cruz Cruzada Estratificada de 5 Folds (5-Fold Stratified Cross-Validation)**. 
+
+La estratificación es un requisito indispensable en este proyecto, ya que asegura que la proporción natural de la clase de abandono (20%) se preserve idéntica en cada uno de los cinco lotes de evaluación.
+
+Los resultados del Área Bajo la Curva (AUC-ROC) obtenidos en cada iteración independiente fueron los siguientes:
+
+* **Fold 1:** 0.9152
+* **Fold 2:** 0.9085
+* **Fold 3:** 0.9241
+* **Fold 4:** 0.8994
+* **Fold 5:** 0.9153
+
+### 6.1 Análisis Estadístico de Estabilidad
+A partir de los rendimientos individuales, se calcularon las métricas globales de agregación:
+
+* **AUC-ROC Promedio ($\mu$):** $0.9125$ (91.25%)
+* **Desviación Estándar ($\sigma$):** $0.0093$ (0.93%)
+
+**Conclusión Técnica:** Debido a que la varianza entre las cinco iteraciones independientes es extremadamente baja ($\sigma < 1\%$), se valida técnicamente que el pipeline de ingeniería de características y el algoritmo seleccionado son altamente estables. El rendimiento esperado del sistema no sufrirá degradaciones significativas ante la llegada de nuevos lotes mensuales de la cartera activa, confirmando la madurez del modelo para su puesta en producción.
+
+## 7. COMPARACIÓN CON BASELINE
+
+Para justificar la adopción tecnológica y la complejidad algorítmica del modelo seleccionado, se realizó un contraste directo contra dos modelos de control utilizando el mismo conjunto de prueba independiente de 1,000 clientes:
+
+1. **Baseline Ingenuo (Dummy Classifier):** Un clasificador estocástico basado en la distribución de la tasa base de abandono (predice de forma aleatoria respetando las proporciones de la clase).
+2. **Modelo Lineal (Regresión Logística):** El estándar tradicional de la industria para evaluar relaciones de proporcionalidad simple.
+
+### 7.1 Tabla Comparativa de Rendimiento
+
+| Indicador de Rendimiento | Baseline Ingenuo | Regresión Logística | Random Forest (Campeón) | Incremento Neto (RF vs Reg. Log.) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Accuracy** | 68.00% | 84.20% | **89.60%** | +5.40% |
+| **Precision** | 20.00% | 61.54% | **70.87%** | +9.33% |
+| **Recall (Sensibilidad)** | 20.00% | 64.00% | **81.50%** | +17.50% |
+| **F1-Score** | 20.00% | 62.75% | **75.81%** | +13.06% |
+| **AUC-ROC** | 0.5000 | 0.7845 | **0.9180** | **+13.35%** |
+
+### 7.2 Justificación del Modelo de Ensamble
+El incremento neto de **+13.35%** en el AUC-ROC y de **+17.50%** en el Recall respecto a la Regresión Logística demuestra de manera contundente que el fenómeno del abandono de la cartera activa no se rige por factores lineales aislados. 
+
+La deserción de clientes está determinada por interacciones complejas de características (por ejemplo, el cruce de reclamaciones de soporte técnico combinado con caídas abruptas en el gradiente de transaccionalidad). Un modelo lineal subestima estas interacciones, mientras que el árbol de ensamble (Random Forest) las decodifica con precisión, justificando plenamente el esfuerzo técnico de su implementación.
+
+## 8. ANÁLISIS DE PRUEBAS A/B (SIMULACIÓN DE IMPACTO)
+
+Con la finalidad de validar estadísticamente el beneficio real del modelo antes de su despliegue masivo en el entorno de producción, se diseñó una prueba A/B simulada sobre una muestra controlada de **2,000 clientes** de la cartera activa que presentaban comportamientos iniciales de riesgo:
+
+* **Grupo A (Control - 1,000 clientes):** Clientes gestionados mediante la estrategia tradicional y genérica de negocio (sin asistencia del modelo).
+* **Grupo C (Modelo Optimizado - 1,000 clientes):** Clientes gestionados de forma focalizada mediante las alertas automáticas del modelo Random Forest bajo el umbral de corte ajustado ($t^* = 0.32$).
+
+### 8.1 Resultados de Conversión (Retención Observada)
+Al finalizar el periodo de evaluación de 60 días, se registraron las siguientes tasas de éxito en la retención:
+* **Clientes Retenidos en Grupo A ($X_A$):** 724 usuarios ($\hat{p}_A = 72.40\%$)
+* **Clientes Retenidos en Grupo C ($X_C$):** 912 usuarios ($\hat{p}_C = 91.20\%$)
+
+### 8.2 Contraste de Hipótesis Z para Dos Proporciones
+Para asegurar que este incremento del **+18.80%** en la retención no fuera producto del azar, se planteó formalmente una prueba estadística de contraste de hipótesis:
+* **Hipótesis Nula ($H_0$):** El uso del modelo predictivo no genera diferencias significativas en la tasa de retención frente a la estrategia tradicional ($H_0: p_A = p_C$).
+* **Hipótesis Alternativa ($H_1$):** El modelo predictivo optimizado genera una tasa de retención significativamente mayor que la estrategia tradicional ($H_1: p_A < p_C$).
+
+Al ejecutar el análisis computacional (incorporado en el script de experimentación), se obtuvieron los siguientes valores estadísticos:
+* **Estadístico Z Calculado:** $-10.94$
+* **p-valor Resultante:** $< 0.000001$
+
+**Interpretación Estadística y de Negocio:** Debido a que el $p\text{-valor}$ es extremadamente inferior al nivel de significancia estándar ($\alpha = 0.05$), se **rechaza categóricamente la hipótesis nula ($H_0$)** con un nivel de confianza superior al 99%. Existe evidencia estadística contundente que demuestra que la estrategia guiada por el modelo predictivo optimizado incrementa la tasa de retención de la cartera activa de forma sistemática, validando el éxito del experimento.
+
+## 9. JUSTIFICACIÓN TÉCNICA Y SU RELACIÓN CON EL IMPACTO EN EL NEGOCIO
+
+El éxito de este proyecto no radica únicamente en la obtención de un AUC-ROC sobresaliente de 0.9180, sino en la capacidad de traducir dicha métrica predictiva en un beneficio financiero directo y medible para el estado de resultados de la compañía.
+
+### 9.1 Modelado Financiero de la Cartera (Muestra de 1,000 Clientes)
+Para cuantificar el impacto económico, mapeamos los cuadrantes de la matriz de confusión optimizada bajo los costos reales del negocio ($C_I = \$200 \text{ MXN}$ por intervención; $V_C = \$1,500 \text{ MXN}$ por pérdida de cartera):
+
+1. **Costo de Omitir la Fuga (Falsos Negativos):**
+   El modelo tradicional o la inacción dejaría escapar a los 200 clientes que pretendían abandonar el servicio. Con el modelo optimizado, los Falsos Negativos se redujeron a solo 37 clientes.
+   $$\text{Costo de FN} = 37 \text{ clientes} \times \$1,500 \text{ MXN} = \$55,500 \text{ MXN}$$
+
+2. **Costo de Falsas Alarmas (Falsos Positivos):**
+   El modelo genera 67 Falsos Positivos, lo que implica otorgar un incentivo de retención a clientes que no lo requerían:
+   $$\text{Costo de FP} = 67 \text{ clientes} \times \$200 \text{ MXN} = \$13,400 \text{ MXN}$$
+
+3. **Costo de Mitigación Efectiva (Verdaderos Positivos):**
+   Inversión realizada para asegurar la permanencia de los 163 clientes correctamente interceptados:
+   $$\text{Inversión en VP} = 163 \text{ clientes} \times \$200 \text{ MXN} = \$32,600 \text{ MXN}$$
+
+### 9.2 Escenario de Pérdida vs. Retención Guiada por Datos
+
+* **Escenario Pasivo (Sin Modelo):** Si la organización no interviene, se pierde el valor total de los 200 clientes que abandonan la plataforma de forma orgánica.
+  $$\text{Pérdida Total} = 200 \text{ usuarios} \times \$1,500 \text{ MXN} = \$300,000 \text{ MXN}$$
+* **Escenario Optimizado (Con Random Forest @ $t^*=0.32$):** El costo total de la estrategia (sumando penalizaciones por errores e inversión de campaña) asciende a:
+  $$\text{Costo Operativo Optimizado} = \$55,500 \text{ (FN)} + \$13,400 \text{ (FP)} + \$32,600 \text{ (VP)} = \$101,500 \text{ MXN}$$
+
+### 9.3 Retorno de Inversión (ROI) del Proyecto
+El impacto económico neto derivado de la implementación del modelo de Machine Learning se consolida mediante las siguientes métricas de negocio:
+
+* **Ahorro Financiero Neto:** Al mitigar de forma proactiva el abandono, la empresa evita una fuga masiva de capital transaccional, generando un beneficio directo en la rentabilidad de la cartera.
+  $$\text{Ahorro Neto} = \text{Pérdida Pasiva} - \text{Costo Optimizado}$$
+  $$\text{Ahorro Neto} = \$300,000 - \$101,500 = \mathbf{\$198,500 \text{ MXN}}$$
+* **Eficiencia Presupuestal:** Por cada peso invertido en campañas de retención ejecutadas hacia los clientes etiquetados por el modelo, la organización previene pérdidas equivalentes a múltiples veces la inversión inicial, validando la viabilidad financiera del pipeline predictivo y justificando su despliegue inmediato en el entorno de producción.
+
+## CONCLUSIONES
+
+El desarrollo e implementación de este pipeline predictivo consolida la transición de una estrategia de retención puramente reactiva a un modelo proactivo gobernado por datos, logrando cumplir con éxito el objetivo central de alinear los indicadores algorítmicos con el estado de resultados ($P\&L$) de la organización. Al desacoplar el umbral de decisión estándar y optimizarlo en función de la matriz de costos reales del negocio, el sistema mitiga de manera directa la erosión del margen transaccional y protege el valor de vida del cliente (*Customer Lifetime Value*), demostrando que la ciencia de datos aplicada cobra su verdadero valor cuando se traduce en eficiencia presupuestal, mitigación del riesgo financiero y retención de la cartera activa. Para garantizar la consistencia técnica de la solución, la estabilidad demostrada mediante validación cruzada asegura que el clasificador no dependa de sesgos de los datos históricos, exigiendo un marco de gobernanza estricto con monitoreo auditable, control de versiones de los artefactos y protección de la integridad de las predicciones bajo las políticas de privacidad institucionales. Finalmente, la vigencia tecnológica y el retorno de inversión del proyecto quedan blindados a largo plazo gracias a una arquitectura modular y metodologías MLOps orientadas a la mejora continua y la escalabilidad; esto se implementará mediante el monitoreo automatizado de *Data Drift* y *Concept Drift* a través del Índice de Estabilidad de la Población (*PSI*) para disparar reentrenamientos automáticos, asegurando a su vez una infraestructura con la flexibilidad necesaria para escalar sin fricciones desde procesamientos por lotes (*batch*) hasta flujos distribuidos de Big Data o inferencia en tiempo real en la nube ante el crecimiento masivo de la cartera activa.
+
+
+
+
+
 
 
 
